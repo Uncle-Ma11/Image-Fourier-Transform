@@ -1,8 +1,12 @@
 import argparse
+import os
+import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from matplotlib.colors import LogNorm
+from numpy import savetxt
 
 
 def read_input():
@@ -129,12 +133,126 @@ def inverse_fft_2d(array):
 
 def mode_one(img):
     f = fft_2d(img)
+    print(f)
 
     plt.subplot(121), plt.imshow(img, cmap='gray')
     plt.title('Input Image'), plt.xticks([]), plt.yticks([])
     plt.subplot(122), plt.imshow(np.abs(f), norm=LogNorm(), cmap='gray')
     plt.title('Logarithmic Colormap'), plt.xticks([]), plt.yticks([])
     plt.show()
+
+
+def mode_two(img):
+    # f = fft_2d(img)
+    f = np.fft.fft2(img)
+
+    denoise_fraction = 0.1
+    print('Denoise Fraction: ' + str(denoise_fraction))
+
+    M, N = f.shape
+    print('Number of non-zeros: ' + str(int(M * (1 - denoise_fraction * 2))) + 'x' + str(
+        int(N * (1 - denoise_fraction * 2))))
+
+    f[int(M * denoise_fraction):int(M * (1 - denoise_fraction))] = 0
+    f[:, int(N * denoise_fraction):int(N * (1 - denoise_fraction))] = 0
+
+    # denoised_img = inverse_fft_2d(f).real
+    denoised_img = np.fft.ifft2(f).real
+    plt.subplot(121), plt.imshow(img, cmap='gray')
+    plt.title('Input Image'), plt.xticks([]), plt.yticks([])
+    plt.subplot(122), plt.imshow(denoised_img, cmap='gray')
+    plt.title('Denoised Version'), plt.xticks([]), plt.yticks([])
+    plt.show()
+
+
+def mode_three(img):
+    # f= fft_2d(img)
+    f = np.fft.fft2(img)
+
+    file_name = 'original.csv'
+    savetxt(file_name, f, delimiter=',')
+    print('original size: ' + str(os.path.getsize(file_name)) + ' bytes')
+
+    plt.subplot(231), plt.imshow(img, cmap='gray')
+    plt.title('Input Image'), plt.xticks([]), plt.yticks([])
+
+    compress_fractions = [20, 40, 60, 80, 95]
+    plt_count = 1
+
+    for fraction in compress_fractions:
+        plt_count += 1
+        trans = f.copy()
+        threshold = np.percentile(abs(trans), fraction)
+        trans[np.abs(trans) < threshold] = 0
+        file_name = str(fraction) + '%.csv'
+        savetxt(file_name, trans, delimiter=',')
+        print(str(fraction) + '% compressed size: ' + str(os.path.getsize(file_name)) + ' bytes')
+        # compressed = inverse_fft_2d(trans).real
+        compressed = np.fft.ifft2(trans).real
+        plt.subplot(2, 3, plt_count), plt.imshow(compressed, cmap='gray')
+        plt.title(str(fraction) + '% compressed'), plt.xticks([]), plt.yticks([])
+
+    plt.suptitle('Compressed images')
+    plt.show()
+
+
+def mode_four(img):
+    arr5 = np.random.rand(2 ** 5, 2 ** 5)
+    arr6 = np.random.rand(2 ** 6, 2 ** 6)
+    arr7 = np.random.rand(2 ** 7, 2 ** 7)
+    arr8 = np.random.rand(2 ** 8, 2 ** 8)
+    arr9 = np.random.rand(2 ** 9, 2 ** 9)
+
+    test_arrs = [arr5, arr6, arr7, arr8, arr9]
+    problem_sizes = ['2^5 x 2^5', '2^6 x 2^6', '2^7 x 2^7', '2^8 x 2^8', '2^9 x 2^9']
+
+    dft_avgs = []
+    fft_avgs = []
+    dft_ci = []
+    fft_ci = []
+
+    power = 5
+
+    for arr in test_arrs:
+        dft_times = []
+        fft_times = []
+        for i in range(1, 10):
+            start = time.time()
+            naive_2ddft(arr)
+            end = time.time()
+            dft_times.append(end - start)
+
+            start = time.time()
+            fft_2d(arr)
+            end = time.time()
+            fft_times.append(end - start)
+        dft_avg = np.average(dft_times)
+        dft_std = np.std(dft_times)
+        fft_avg = np.average(fft_times)
+        fft_std = np.std(fft_times)
+        dft_avgs.append(dft_avg)
+        fft_avgs.append(fft_avg)
+        dft_ci.append(dft_std * 2)
+        fft_ci.append(fft_std * 2)
+        print("Naive DFT power of " + str(power) + " average runtime: " + str(dft_avg) + "s")
+        print("Naive DFT power of " + str(power) + " runtime standard deviation: " + str(dft_std) + "s")
+        print("FFT power of " + str(power) + " average runtime: " + str(fft_avg) + "s")
+        print("FFT power of " + str(power) + " runtime standard deviation: " + str(fft_std) + "s")
+        power += 1
+
+    plt.figure(figsize=(15, 5))
+    plt.title('DFT Runtime Analysis')
+    plt.xlabel('problem size')
+    plt.ylabel('average runtime(s)')
+
+    plt.errorbar(x=problem_sizes, y=dft_avgs, yerr=dft_ci, label='naive dft')
+    plt.errorbar(x=problem_sizes, y=fft_avgs, yerr=fft_ci, label='fft')
+    plt.legend()
+    plt.show()
+
+
+
+
 
 
 if __name__ == "__main__":
@@ -145,16 +263,14 @@ if __name__ == "__main__":
 
     if mode == 1:
         mode_one(padded_img)
-
     elif mode == 2:
-        print("")
+        mode_two(padded_img)
     elif mode == 3:
-        print("")
+        mode_three(padded_img)
     elif mode == 4:
-        print("")
+        mode_four(padded_img)
     else:
-        print("")
-
+        print("Invalid Input")
 
     # test = np.array([[0, 1, 0, 1], [1, 1, 1, 0], [0, 1, 0, 0], [0, 1, 1, 0]])
     # dft1 = np.fft.ifft2(test)
